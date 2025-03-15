@@ -11,7 +11,11 @@
             "request": "launch",
             "program": "${workspaceFolder}/api/target/debug/api",
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}/api",
+            // "preLaunchTask": "cargo build"
+            "cargo": {
+                "args": ["build", "--manifest-path", "api/Cargo.toml"]
+            }
         },
 
         // UI

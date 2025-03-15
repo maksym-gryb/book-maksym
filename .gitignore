@@ -24,3 +24,9 @@ target/
 # React Router
 /.react-router/
 /build/
+
+
+# Data stuff
+*.db
+*.db-shm
+*.db-wal
