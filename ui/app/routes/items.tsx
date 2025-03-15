@@ -26,9 +26,9 @@ export default function Component( {loaderData} : Route.ComponentProps){
         {
             loaderData.map(function (a : any) {
                 return (
-                    <div className="w-[200px] rounded-3x1 border border-gray-200 p-6 space-y-2">
-                        <h1>{a.name}</h1>
-                        <p>{a.price}</p>
+                    <div className="text-center w-[200px] rounded-3x1 border border-gray-200 p-6 space-y-2">
+                        <h1 className="">{a.name}</h1>
+                        <p>{a.price} $</p>
                     </div>
             )})
         }
