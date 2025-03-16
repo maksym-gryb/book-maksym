@@ -10,7 +10,7 @@ export function meta({}: Route.MetaArgs) {
 export async function clientLoader({
   params,
 }: Route.ClientLoaderArgs) {
-  const res = await fetch(`http://localhost:8000/items`);
+  const res = await fetch(`http://localhost:8000/events`);
   const product = await res.json();
   return product;
 }
@@ -22,13 +22,15 @@ export function HydrateFallback() {
 
 export default function Component( {loaderData} : Route.ComponentProps){
     return (
-        <div className="flex flex-col items-center justify-center">
+        <div className="flex flex-col items-center justify-center space-y-8">
         {
             loaderData.map(function (a : any) {
                 return (
-                    <div className="text-center w-[200px] rounded-3x1 border border-gray-200 p-6 space-y-2">
-                        <h1 className="">{a.name}</h1>
-                        <p>{a.price} $</p>
+                    <div className="text-center w-[200px] border border-gray-200 p-6 space-y-3">
+                        <p className="text-3xl capitalize">{a.title}</p>
+                        <hr />
+                        <p className="rounded-2xl border py-2">Start Date: {a.start_date}</p>
+                        <p className="rounded-2xl border py-2">End Date: {a.end_date}</p>
                     </div>
             )})
         }
