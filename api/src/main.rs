@@ -1,5 +1,7 @@
 #[macro_use] extern crate rocket;
 
+mod cors;
+
 use rocket::serde::{json::Json, Deserialize, Serialize};
 
 use rocket::get;
@@ -8,9 +10,6 @@ use rocket_okapi::{openapi, openapi_get_routes};
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use rocket_okapi::okapi::schemars;
 use rocket_okapi::okapi::schemars::JsonSchema;
-
-use rocket::http::Method;
-use rocket_cors::{AllowedHeaders, AllowedOrigins, CorsOptions};
 
 use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool, FromRow};
 
@@ -62,6 +61,8 @@ async fn rocket() -> _ {
 
     let db = SqlitePool::connect(DB_URL).await.unwrap();
 
+    // TODO: transfer to migrations,
+    // once we know what we want
     let create_table_result = sqlx::query("
         CREATE TABLE IF NOT EXISTS events
         (id INTEGER PRIMARY KEY NOT NULL, title TEXT NOT NULL, start_date TEXT NULL, end_date TEXT NULL);"
@@ -85,19 +86,20 @@ async fn rocket() -> _ {
 
     println!("Inserts result: {:?}", insert_result);
 
-    let cors = CorsOptions {
-        allowed_origins: AllowedOrigins::some_exact(&["http://localhost:5173"]),
-        allowed_methods: vec![Method::Get, Method::Post].into_iter().map(From::from).collect(),
-        allowed_headers: AllowedHeaders::some(&["Authorization", "Accept"]),
-        allow_credentials: true,
-        ..Default::default()
-    }
-    .to_cors()
-    .expect("error creating CORS fairing");
+    // let cors = CorsOptions {
+    //     allowed_origins: AllowedOrigins::some_exact(&["http://localhost:5173"]),
+    //     allowed_methods: vec![Method::Get, Method::Post].into_iter().map(From::from).collect(),
+    //     allowed_headers: AllowedHeaders::some(&["Authorization", "Accept"]),
+    //     allow_credentials: true,
+    //     ..Default::default()
+    // }
+    // .to_cors()
+    // .expect("error creating CORS fairing");
 
     rocket::build()
     .mount("/", openapi_get_routes![get_events])
-    .attach(cors)
+    // .attach(cors)
+    .attach(cors::CORS)
     .mount("/swagger", make_swagger_ui(&get_docs()))
     .manage(AppState {db : db})
 }
