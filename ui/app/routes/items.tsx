@@ -10,7 +10,7 @@ export function meta({}: Route.MetaArgs) {
 export async function clientLoader({
   params,
 }: Route.ClientLoaderArgs) {
-  const res = await fetch(`http://localhost:8000/events`);
+  const res = await fetch(`http://localhost:8000/events`, {credentials: 'include'});
   const product = await res.json();
   return product;
 }
