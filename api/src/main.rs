@@ -1,18 +1,22 @@
 #[macro_use] extern crate rocket;
 
 mod cors;
+mod auth;
+
+use sqlx::Error;
 
 use rocket::serde::{json::Json, Deserialize, Serialize};
 
-use rocket::{get, post};
+use rocket::{get, post, State, Response};
+use rocket::response::{status, Redirect};
 use rocket::form::{Form, FromForm};
-use rocket::State;
+use rocket::http::{CookieJar, Status};
 use rocket_okapi::{openapi, openapi_get_routes};
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use rocket_okapi::okapi::schemars;
 use rocket_okapi::okapi::schemars::JsonSchema;
 
-// use rocket_auth::{Users, Error, Auth, Signup, Login};
+use uuid::Uuid;
 
 use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool, FromRow, Row};
 
@@ -28,16 +32,24 @@ struct AppState{
     db : SqlitePool
 }
 
+#[derive(Serialize, Deserialize, JsonSchema)]
+struct ErrorResponse {
+    error: String,
+    message: String,
+}
+
 const DB_URL: &str = "sqlite://sqlite.db";
 
 #[openapi(tag = "Events")]
 #[get("/events")]
-async fn get_events(state : &State<AppState>) -> Json<Vec<Event>> {
+async fn get_events(jar: &CookieJar<'_>,state : &State<AppState>) -> Json<Vec<Event>> {
     let events = sqlx::query_as::<_, Event>(
         "SELECT * FROM events"
     ).fetch_all(&state.db)
     .await
     .unwrap();
+
+    jar.add(("session_id", Uuid::new_v4().to_string()));
 
     return Json(events);
 }
@@ -45,7 +57,7 @@ async fn get_events(state : &State<AppState>) -> Json<Vec<Event>> {
 #[openapi(tag = "Events")]
 #[post("/events", data = "<event>")]
 async fn create_event(state: &State<AppState>, event: Form<Event>)
-    -> Json<Event> {
+    -> Result<Json<Event>, Status> {
     let result = sqlx::query(
         "INSERT INTO events
         (title, start_date, end_date)
@@ -57,19 +69,17 @@ async fn create_event(state: &State<AppState>, event: Form<Event>)
     .bind(&event.start_date)
     .bind(&event.end_date)
     .fetch_one(&state.db)
-    .await;
+    .await
+    .unwrap();
 
-    let id: i32 = match result {
-        Ok(r) => r.get::<i32, &str>("id"),
-        Err(e) => panic!("could not save row: {}", e)
-    };
+    let id = result.get::<i32, &str>("id");
 
-    Json(Event{
+    Ok(Json(Event{
         id: Some(id),
         title: event.title.to_string(),
         start_date: event.start_date.to_string(),
         end_date: event.end_date.to_string()
-    })
+    }))
 }
 
 fn get_docs() -> SwaggerUIConfig {
@@ -79,22 +89,10 @@ fn get_docs() -> SwaggerUIConfig {
     }
 }
 
-
-// #[post("/signup", data="<form>")]
-// async fn signup(form: Form<Signup>, auth: Auth<'_>) {
-//     auth.signup(&form).await;
-//     auth.login(&form.into());
-// }
-
-// #[post("/login", data="<form>")]
-// fn login(form: Form<Login>, auth: Auth) {
-//     auth.login(&form);
-// }
-
-// #[get("/logout")]
-// fn logout(auth: Auth) {
-//     auth.logout();
-// }
+#[get("/")]
+fn redirect_to_swagger() -> Redirect {
+    Redirect::to(uri!("/swagger"))
+}
 
 #[launch]
 #[tokio::main]
@@ -120,6 +118,7 @@ async fn rocket() -> _ {
 
     println!("Create events table result: {:?}", create_table_result);
 
+    /* TEMP don't delete
     let delete_result = sqlx::query("
         DELETE FROM events
     ").execute(&db).await.unwrap();
@@ -135,20 +134,12 @@ async fn rocket() -> _ {
     ").execute(&db).await.unwrap();
 
     println!("Inserts result: {:?}", insert_result);
-
-    // let cors = CorsOptions {
-    //     allowed_origins: AllowedOrigins::some_exact(&["http://localhost:5173"]),
-    //     allowed_methods: vec![Method::Get, Method::Post].into_iter().map(From::from).collect(),
-    //     allowed_headers: AllowedHeaders::some(&["Authorization", "Accept"]),
-    //     allow_credentials: true,
-    //     ..Default::default()
-    // }
-    // .to_cors()
-    // .expect("error creating CORS fairing");
+    */
 
     rocket::build()
+    .mount("/", routes![redirect_to_swagger])
+    // .mount("/", auth::auth_routes())
     .mount("/", openapi_get_routes![get_events, create_event])
-    // .mount("/", routes![signup, login, logout])
     .attach(cors::CORS)
     .mount("/swagger", make_swagger_ui(&get_docs()))
     .manage(AppState {db : db})
