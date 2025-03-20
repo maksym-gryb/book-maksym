@@ -38,6 +38,12 @@ struct ErrorResponse {
     message: String,
 }
 
+#[derive(Serialize, Deserialize, JsonSchema, Clone, FromRow, Debug, FromForm)]
+struct Login {
+    username: String,
+    password: String
+}
+
 const DB_URL: &str = "sqlite://sqlite.db";
 
 #[openapi(tag = "Events")]
@@ -49,7 +55,12 @@ async fn get_events(jar: &CookieJar<'_>,state : &State<AppState>) -> Json<Vec<Ev
     .await
     .unwrap();
 
-    jar.add(("session_id", Uuid::new_v4().to_string()));
+    let c: String = match jar.get("session_id") {
+        Some(s) => s.value().to_string(),
+        None => "no cookies".to_string()
+    };
+
+    println!("session_id := {}", c);
 
     return Json(events);
 }
@@ -92,6 +103,22 @@ fn get_docs() -> SwaggerUIConfig {
 #[get("/")]
 fn redirect_to_swagger() -> Redirect {
     Redirect::to(uri!("/swagger"))
+}
+
+#[post("/login")]
+fn login(jar: &CookieJar) {
+    let already_logged_id: bool = match jar.get("session_id") {
+        Some(s) => {
+            println!("session_id := {}", s.to_string());
+            true
+        },
+        None => false
+    };
+
+    if !already_logged_id
+    {
+        jar.add(("session_id", Uuid::new_v4().to_string()));
+    }
 }
 
 #[launch]
@@ -138,6 +165,7 @@ async fn rocket() -> _ {
 
     rocket::build()
     .mount("/", routes![redirect_to_swagger])
+    .mount("/", routes![login])
     // .mount("/", auth::auth_routes())
     .mount("/", openapi_get_routes![get_events, create_event])
     .attach(cors::CORS)
