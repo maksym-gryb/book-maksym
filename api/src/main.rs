@@ -38,11 +38,11 @@ struct ErrorResponse {
     message: String,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, FromRow, Debug, FromForm)]
-struct Login {
-    username: String,
-    password: String
-}
+// #[derive(Serialize, Deserialize, JsonSchema, Clone, FromRow, Debug, FromForm)]
+// struct LogimDto {
+//     username: String,
+//     password: String
+// }
 
 const DB_URL: &str = "sqlite://sqlite.db";
 
@@ -105,22 +105,6 @@ fn redirect_to_swagger() -> Redirect {
     Redirect::to(uri!("/swagger"))
 }
 
-#[post("/login")]
-fn login(jar: &CookieJar) {
-    let already_logged_id: bool = match jar.get("session_id") {
-        Some(s) => {
-            println!("session_id := {}", s.to_string());
-            true
-        },
-        None => false
-    };
-
-    if !already_logged_id
-    {
-        jar.add(("session_id", Uuid::new_v4().to_string()));
-    }
-}
-
 #[launch]
 #[tokio::main]
 async fn rocket() -> _ {
@@ -141,6 +125,11 @@ async fn rocket() -> _ {
     let create_table_result = sqlx::query("
         CREATE TABLE IF NOT EXISTS events
         (id INTEGER PRIMARY KEY NOT NULL, title TEXT NOT NULL, start_date TEXT NULL, end_date TEXT NULL);"
+    ).execute(&db).await.unwrap();
+
+    let create_table_result = sqlx::query("
+        CREATE TABLE IF NOT EXISTS users
+        (id INTEGER PRIMARY KEY NOT NULL, username TEXT NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL);"
     ).execute(&db).await.unwrap();
 
     println!("Create events table result: {:?}", create_table_result);
@@ -165,8 +154,8 @@ async fn rocket() -> _ {
 
     rocket::build()
     .mount("/", routes![redirect_to_swagger])
-    .mount("/", routes![login])
-    // .mount("/", auth::auth_routes())
+    // .mount("/", routes![login])
+    .mount("/", auth::auth_routes())
     .mount("/", openapi_get_routes![get_events, create_event])
     .attach(cors::CORS)
     .mount("/swagger", make_swagger_ui(&get_docs()))

@@ -19,12 +19,20 @@ export default function Login(){
     }, [cookie])  // This will run only when cookies change
 
     function login(formData: FormData) {
-        const username = formData.get("username")
-        const password = formData.get("password")
+        const username = formData.get("username") as string
+        const password = formData.get("password") as string
+
+        const formBody = new URLSearchParams();
+        formBody.append("username", username);
+        formBody.append("password", password);
 
         fetch("http://localhost:8000/login", {
             method: "POST",
-            body: JSON.stringify({username: username, password: password}),
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            // body: JSON.stringify({username: username, password: password}),
+            body: formBody.toString(),
             credentials: 'include'
         })
         .then((res) => {

@@ -1,3 +1,79 @@
+use uuid::Uuid;
+use rocket::outcome::IntoOutcome;
+
+use rocket::http::{CookieJar, Status};
+use rocket::request::{self, FromRequest};
+use rocket::{get, post, State, Response, Request};
+use rocket::form::{Form, FromForm};
+use rocket::serde::{json::Json, Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Clone, Debug, FromForm)]
+pub struct User{
+    id: Option<u32>,
+    username: String,
+    password: Option<String>,
+    role: String
+}
+
+pub struct Session(String);
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for User {
+    type Error = std::convert::Infallible;
+
+    async fn from_request(request: &'r Request<'_>) -> request::Outcome<User, Self::Error> {
+        let session: Session = rocket::outcome::try_outcome!(request.cookies()
+            .get("session_id")// TODO: make private // TODO: make const string
+            .and_then(|cookie| cookie.value().parse().ok())
+            .map(Session)
+            .or_forward(Status::Unauthorized));
+
+        let user = User{
+            id: Some(1),
+            username: "myname".to_string(),
+            password: None,
+            role: "admin".to_string()
+        };
+
+        request::Outcome::Success(user)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, FromForm)]
+pub struct Login{
+    username: String,
+    password: String
+}
+
+#[post("/login", data="<login>")]
+fn login(jar: &CookieJar, login: Form<Login>) {
+    let already_logged_id: bool = match jar.get("session_id") {
+        Some(s) => {
+            println!("session_id := {}", s.to_string());
+            true
+        },
+        None => false
+    };
+
+    println!("{}", &login.username);
+    println!("{}", &login.password);
+
+    if !already_logged_id
+    {
+        jar.add(("session_id", Uuid::new_v4().to_string()));
+    }
+}
+
+#[get("/profile")]
+fn profile(user: User) -> Json<User> {
+    Json(user)
+}
+
+pub fn auth_routes() -> Vec<rocket::Route> {
+    routes![login, profile]
+}
+
+
 // use rocket::form::Form;
 // use rocket::response::{status, Redirect};
 // use rocket::outcome::IntoOutcome;
