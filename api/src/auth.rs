@@ -6,27 +6,57 @@ use rocket::request::{self, FromRequest};
 use rocket::{get, post, State, Response, Request};
 use rocket::form::{Form, FromForm};
 use rocket::serde::{json::Json, Deserialize, Serialize};
+use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool, FromRow, Row};
+
+use argon2::{
+    password_hash::{
+        rand_core::OsRng,
+        PasswordHash, PasswordHasher, PasswordVerifier, SaltString
+    },
+    Argon2
+};
+
+use crate::state::AppState;
 
 #[derive(Serialize, Deserialize, Clone, Debug, FromForm)]
 pub struct User{
-    id: Option<u32>,
-    username: String,
-    password: Option<String>,
-    role: String
+    pub id: Option<i64>,
+    pub username: String,
+    pub password: Option<String>,
+    pub role: String
 }
 
-pub struct Session(String);
+#[derive(FromRow)]
+pub struct Session{
+    id: String,
+    user_id: i64
+}
+
+pub struct SessionId(String);
 
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for User {
-    type Error = std::convert::Infallible;
+    // type Error = std::convert::Infallible;
+    type Error = ();
 
-    async fn from_request(request: &'r Request<'_>) -> request::Outcome<User, Self::Error> {
-        let session: Session = rocket::outcome::try_outcome!(request.cookies()
+    async fn from_request(request: &'r Request<'_>) -> request::Outcome<User, ()/*Self::Error*/> {
+        let session_id: SessionId = rocket::outcome::try_outcome!(
+            request.cookies()
             .get("session_id")// TODO: make private // TODO: make const string
             .and_then(|cookie| cookie.value().parse().ok())
-            .map(Session)
+            .map(SessionId)
             .or_forward(Status::Unauthorized));
+
+        let state_outcome = request.guard::<&State<AppState>>().await;
+        let state = rocket::outcome::try_outcome!(state_outcome);
+
+        let session = sqlx::query_as::<_, Session>(
+            "SELECT * FROM sessions
+            -- ORDER BY created_on
+            LIMIT 1"
+        ).fetch_optional(&state.db)
+        .await
+        .unwrap();
 
         let user = User{
             id: Some(1),
@@ -46,7 +76,7 @@ pub struct Login{
 }
 
 #[post("/login", data="<login>")]
-fn login(jar: &CookieJar, login: Form<Login>) {
+async fn login(jar: &CookieJar<'_>, state: &State<AppState>, login: Form<Login>) -> Status {
     let already_logged_id: bool = match jar.get("session_id") {
         Some(s) => {
             println!("session_id := {}", s.to_string());
@@ -58,9 +88,36 @@ fn login(jar: &CookieJar, login: Form<Login>) {
     println!("{}", &login.username);
     println!("{}", &login.password);
 
-    if !already_logged_id
-    {
-        jar.add(("session_id", Uuid::new_v4().to_string()));
+    let user = sqlx::query_as!(User,
+        "
+        SELECT id, username, password, role
+        FROM users
+        WHERE username = ?
+    ", login.username)
+    .fetch_optional(&state.db)
+    .await
+    .unwrap();
+
+    match user {
+        Some(u) => {
+
+            let psw = u.password.unwrap();
+            let p = psw.as_str();
+            
+            let parsed_hash = PasswordHash::new(p).unwrap();
+            if !Argon2::default().verify_password(login.password.as_bytes(), &parsed_hash).is_ok() {
+                return Status::Unauthorized;
+            }
+
+            let uuid = Uuid::new_v4().to_string();
+            println!("new cookies := {}", uuid);
+            jar.add(("session_id", uuid));
+            Status::Ok
+        },
+        None => {
+            println!("no cookies for you!");
+            Status::Unauthorized
+        }
     }
 }
 
@@ -71,6 +128,20 @@ fn profile(user: User) -> Json<User> {
 
 pub fn auth_routes() -> Vec<rocket::Route> {
     routes![login, profile]
+}
+
+pub async fn init_admin_user(db: &SqlitePool) {
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    let password_hash = argon2.hash_password(b"1q2w3E*", &salt).unwrap().to_string();
+
+    let insert_admin_user = sqlx::query!("
+        INSERT INTO users
+        (username, password, role)
+        VALUES
+        ('admin', ?, 'admin')
+    ", password_hash)
+    .execute(db).await.unwrap();
 }
 
 

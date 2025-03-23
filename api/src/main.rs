@@ -2,6 +2,10 @@
 
 mod cors;
 mod auth;
+use auth::User;
+
+mod state;
+use state::AppState;
 
 use sqlx::Error;
 
@@ -22,14 +26,10 @@ use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool, FromRow, Row};
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, FromRow, Debug, FromForm)]
 struct Event {
-    id: Option<i32>,
+    id: Option<i64>,
     title: String,
     start_date: String,// TODO: find a way to convert to Date/DateTime
     end_date: String
-}
-
-struct AppState{
-    db : SqlitePool
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
@@ -46,9 +46,9 @@ struct ErrorResponse {
 
 const DB_URL: &str = "sqlite://sqlite.db";
 
-#[openapi(tag = "Events")]
+// #[openapi(tag = "Events")]
 #[get("/events")]
-async fn get_events(jar: &CookieJar<'_>,state : &State<AppState>) -> Json<Vec<Event>> {
+async fn get_events(jar: &CookieJar<'_>, state: &State<AppState>, user: User) -> Json<Vec<Event>> {
     let events = sqlx::query_as::<_, Event>(
         "SELECT * FROM events"
     ).fetch_all(&state.db)
@@ -61,6 +61,7 @@ async fn get_events(jar: &CookieJar<'_>,state : &State<AppState>) -> Json<Vec<Ev
     };
 
     println!("session_id := {}", c);
+    println!("username := {}", user.username);
 
     return Json(events);
 }
@@ -83,7 +84,7 @@ async fn create_event(state: &State<AppState>, event: Form<Event>)
     .await
     .unwrap();
 
-    let id = result.get::<i32, &str>("id");
+    let id = result.get::<i64, &str>("id");
 
     Ok(Json(Event{
         id: Some(id),
@@ -126,14 +127,22 @@ async fn rocket() -> _ {
         CREATE TABLE IF NOT EXISTS events
         (id INTEGER PRIMARY KEY NOT NULL, title TEXT NOT NULL, start_date TEXT NULL, end_date TEXT NULL);"
     ).execute(&db).await.unwrap();
+    println!("Create events table result: {:?}", create_table_result);
 
     let create_table_result = sqlx::query("
         CREATE TABLE IF NOT EXISTS users
         (id INTEGER PRIMARY KEY NOT NULL, username TEXT NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL);"
     ).execute(&db).await.unwrap();
+    println!("Create users table result: {:?}", create_table_result);
 
-    println!("Create events table result: {:?}", create_table_result);
+    let create_table_result = sqlx::query("
+        CREATE TABLE IF NOT EXISTS sessions
+        (id TEXT PRIMARY KEY NOT NULL, user_id INT NOT NULL)"// foreign key for user_id?
+    ).execute(&db).await.unwrap();
+    println!("Create sessions table result: {:?}", create_table_result);
 
+
+    auth::init_admin_user(&db).await;
     /* TEMP don't delete
     let delete_result = sqlx::query("
         DELETE FROM events
@@ -153,10 +162,9 @@ async fn rocket() -> _ {
     */
 
     rocket::build()
-    .mount("/", routes![redirect_to_swagger])
-    // .mount("/", routes![login])
+    .mount("/", routes![redirect_to_swagger, get_events])
     .mount("/", auth::auth_routes())
-    .mount("/", openapi_get_routes![get_events, create_event])
+    .mount("/", openapi_get_routes![/*get_events, */create_event])
     .attach(cors::CORS)
     .mount("/swagger", make_swagger_ui(&get_docs()))
     .manage(AppState {db : db})
