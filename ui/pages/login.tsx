@@ -1,14 +1,25 @@
 import { useState, useEffect } from 'react'
-import useSWR from 'swr'
 import { useCookies } from 'react-cookie'
+import { toast } from 'react-toastify';
+
 
 interface CookieValues {
   session_id?: string;
 }
 
+const contextClass = {
+  success: "bg-blue-600",
+  error: "bg-red-600",
+  info: "bg-gray-600",
+  warning: "bg-orange-400",
+  default: "bg-indigo-600",
+  dark: "bg-white-600 font-gray-300",
+};
+
 export default function Login(){
     const [cookie, setCookie] = useCookies<'session_id', CookieValues>(['session_id']);
     const [isLoggedIn, setLoggedIn] = useState(false)
+    const notify = (e: string) => toast<string>(e);
 
     // Check if session cookie is set on initial render
     useEffect(() => {
@@ -36,7 +47,10 @@ export default function Login(){
             credentials: 'include'
         })
         .then((res) => {
-            if(!res.ok) return;
+            if(!res.ok) {
+                notify("Failed to login");
+                return;
+            }
 
             setLoggedIn(true)
         })
