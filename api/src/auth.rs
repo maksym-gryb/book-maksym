@@ -18,7 +18,7 @@ use argon2::{
 
 use crate::state::AppState;
 
-#[derive(Serialize, Deserialize, Clone, Debug, FromForm)]
+#[derive(Serialize, Deserialize, Clone, Debug, FromForm, FromRow)]
 pub struct User{
     pub id: Option<i64>,
     pub username: String,
@@ -58,12 +58,20 @@ impl<'r> FromRequest<'r> for User {
         .await
         .unwrap();
 
-        let user = User{
-            id: Some(1),
-            username: "myname".to_string(),
-            password: None,
-            role: "admin".to_string()
+        let s = match session {
+            Some(e) => e,
+            None => return request::Outcome::Error((Status::InternalServerError, ())),
         };
+
+        let user = sqlx::query_as!(
+            User,
+            "SELECT *
+            FROM users
+            WHERE id = ?
+        ", s.user_id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
 
         request::Outcome::Success(user)
     }
@@ -111,6 +119,19 @@ async fn login(jar: &CookieJar<'_>, state: &State<AppState>, login: Form<Login>)
 
             let uuid = Uuid::new_v4().to_string();
             println!("new cookies := {}", uuid);
+
+            sqlx::query("
+                INSERT INTO sessions
+                (id, user_id)
+                VALUES
+                ($1, $2)
+            ")
+            .bind(&uuid)
+            .bind(&u.id)
+            .execute(&state.db)
+            .await
+            .unwrap();
+
             jar.add(("session_id", uuid));
             Status::Ok
         },
