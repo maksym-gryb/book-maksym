@@ -50,28 +50,32 @@ impl<'r> FromRequest<'r> for User {
         let state_outcome = request.guard::<&State<AppState>>().await;
         let state = rocket::outcome::try_outcome!(state_outcome);
 
-        let session = sqlx::query_as::<_, Session>(
+        let session = match sqlx::query_as::<_, Session>(
             "SELECT * FROM sessions
-            -- ORDER BY created_on
+            ORDER BY created_on DESC
             LIMIT 1"
         ).fetch_optional(&state.db)
-        .await
-        .unwrap();
-
-        let s = match session {
-            Some(e) => e,
-            None => return request::Outcome::Error((Status::InternalServerError, ())),
+        .await{
+            Ok(r) => match r {
+                Some(s) => s,
+                None => return request::Outcome::Error((Status::Unauthorized, ())),
+            },
+            Err(_) => return request::Outcome::Error((Status::InternalServerError, ())),
         };
+
+        println!("[FromRequest::User] session_id := {}", &session.id);
 
         let user = sqlx::query_as!(
             User,
             "SELECT *
             FROM users
             WHERE id = ?
-        ", s.user_id)
+        ", session.user_id)
         .fetch_one(&state.db)
         .await
         .unwrap();
+
+        println!("[FromRequest::User] username := {}", &user.username);
 
         request::Outcome::Success(user)
     }
@@ -122,9 +126,9 @@ async fn login(jar: &CookieJar<'_>, state: &State<AppState>, login: Form<Login>)
 
             sqlx::query("
                 INSERT INTO sessions
-                (id, user_id)
+                (id, user_id, created_on)
                 VALUES
-                ($1, $2)
+                ($1, $2, datetime())
             ")
             .bind(&uuid)
             .bind(&u.id)
@@ -142,13 +146,21 @@ async fn login(jar: &CookieJar<'_>, state: &State<AppState>, login: Form<Login>)
     }
 }
 
+#[get("/logout")]
+async fn logout(user: User, state: &State<AppState>) {
+    sqlx::query!("DELETE FROM sessions WHERE user_id = ?", user.id)
+    .execute(&state.db)
+    .await
+    .unwrap();
+}
+
 #[get("/profile")]
 fn profile(user: User) -> Json<User> {
     Json(user)
 }
 
 pub fn auth_routes() -> Vec<rocket::Route> {
-    routes![login, profile]
+    routes![login, logout, profile]
 }
 
 pub async fn init_admin_user(db: &SqlitePool) {

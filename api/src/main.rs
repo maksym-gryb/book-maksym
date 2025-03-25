@@ -55,13 +55,13 @@ async fn get_events(jar: &CookieJar<'_>, state: &State<AppState>, user: User) ->
     .await
     .unwrap();
 
-    let c: String = match jar.get("session_id") {
-        Some(s) => s.value().to_string(),
-        None => "no cookies".to_string()
-    };
+    // let c: String = match jar.get("session_id") {
+    //     Some(s) => s.value().to_string(),
+    //     None => "no cookies".to_string()
+    // };
 
-    println!("session_id := {}", c);
-    println!("username := {}", user.username);
+    // println!("session_id := {}", c);
+    // println!("username := {}", user.username);
 
     return Json(events);
 }
@@ -137,12 +137,12 @@ async fn rocket() -> _ {
 
     let create_table_result = sqlx::query("
         CREATE TABLE IF NOT EXISTS sessions
-        (id TEXT PRIMARY KEY NOT NULL, user_id INT NOT NULL)"// foreign key for user_id?
+        (id TEXT PRIMARY KEY NOT NULL, user_id INT NOT NULL, created_on TEXT NOT NULL)"// foreign key for user_id?
     ).execute(&db).await.unwrap();
     println!("Create sessions table result: {:?}", create_table_result);
 
 
-    auth::init_admin_user(&db).await;
+    // auth::init_admin_user(&db).await;// move into migration // -> if not exist, insert
     /* TEMP don't delete
     let delete_result = sqlx::query("
         DELETE FROM events
