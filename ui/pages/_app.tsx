@@ -9,16 +9,16 @@ export default function App({ Component, pageProps }: AppProps) {
     <CookiesProvider defaultSetOptions={{ path: '/' }}>
       <Component {...pageProps} />
       <ToastContainer
-        position="top-right"
+        // position="top-right"
         autoClose={2000}
-        hideProgressBar={false}
+        hideProgressBar={true}
         newestOnTop={false}
-        closeOnClick={false}
+        closeOnClick={true}
         rtl={false}
         pauseOnFocusLoss
         draggable
         pauseOnHover
-        theme="light"
+        theme="dark"
         // transition={Bounce}
       />
     </CookiesProvider>

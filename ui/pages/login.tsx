@@ -19,7 +19,7 @@ const contextClass = {
 export default function Login(){
     const [cookie, setCookie] = useCookies<'session_id', CookieValues>(['session_id']);
     const [isLoggedIn, setLoggedIn] = useState(false)
-    const notify = (e: string) => toast<string>(e);
+    // const notify = (e: string) => toast<string>(e, {className: "bg-red-600"});
 
     // Check if session cookie is set on initial render
     useEffect(() => {
@@ -48,7 +48,10 @@ export default function Login(){
         })
         .then((res) => {
             if(!res.ok) {
-                notify("Failed to login");
+                toast.error("Failed to login!", {
+                    position: "top-center"
+                });
+                // notify("Failed to login");
                 return;
             }
 
