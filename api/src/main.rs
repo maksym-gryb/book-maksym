@@ -1,36 +1,31 @@
 #[macro_use] extern crate rocket;
 
 mod cors;
+mod htmx;
 mod auth;
 use auth::User;
 
 mod state;
 use state::AppState;
 
-use sqlx::Error;
+mod data;
+use data::Event;
 
 use rocket::serde::{json::Json, Deserialize, Serialize};
 
-use rocket::{get, post, State, Response};
-use rocket::response::{status, Redirect};
-use rocket::form::{Form, FromForm};
-use rocket::http::{CookieJar, Status};
+use rocket::{get, post, State};
+use rocket::response::Redirect;
+use rocket::form::Form;
+use rocket::http::Status;
 use rocket_okapi::{openapi, openapi_get_routes};
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 use rocket_okapi::okapi::schemars;
 use rocket_okapi::okapi::schemars::JsonSchema;
 
-use uuid::Uuid;
+use rocket_dyn_templates::Template;
 
-use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool, FromRow, Row};
+use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool, Row};
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, FromRow, Debug, FromForm)]
-struct Event {
-    id: Option<i64>,
-    title: String,
-    start_date: String,// TODO: find a way to convert to Date/DateTime
-    end_date: String
-}
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 struct ErrorResponse {
@@ -38,30 +33,16 @@ struct ErrorResponse {
     message: String,
 }
 
-// #[derive(Serialize, Deserialize, JsonSchema, Clone, FromRow, Debug, FromForm)]
-// struct LogimDto {
-//     username: String,
-//     password: String
-// }
-
 const DB_URL: &str = "sqlite://sqlite.db";
 
 // #[openapi(tag = "Events")]
 #[get("/events")]
-async fn get_events(jar: &CookieJar<'_>, state: &State<AppState>, user: User) -> Json<Vec<Event>> {
+async fn get_events(state: &State<AppState>, _user: User) -> Json<Vec<Event>> {
     let events = sqlx::query_as::<_, Event>(
         "SELECT * FROM events"
     ).fetch_all(&state.db)
     .await
     .unwrap();
-
-    // let c: String = match jar.get("session_id") {
-    //     Some(s) => s.value().to_string(),
-    //     None => "no cookies".to_string()
-    // };
-
-    // println!("session_id := {}", c);
-    // println!("username := {}", user.username);
 
     return Json(events);
 }
@@ -142,7 +123,7 @@ async fn rocket() -> _ {
     println!("Create sessions table result: {:?}", create_table_result);
 
 
-    // auth::init_admin_user(&db).await;// move into migration // -> if not exist, insert
+    auth::init_admin_user(&db).await;
     /* TEMP don't delete
     let delete_result = sqlx::query("
         DELETE FROM events
@@ -163,9 +144,14 @@ async fn rocket() -> _ {
 
     rocket::build()
     .mount("/", routes![redirect_to_swagger, get_events])
-    .mount("/", auth::auth_routes())
+    .mount("/", auth::routes())
+    .mount("/htmx", htmx::routes())
     .mount("/", openapi_get_routes![/*get_events, */create_event])
     .attach(cors::CORS)
+    .attach(Template::fairing())
     .mount("/swagger", make_swagger_ui(&get_docs()))
     .manage(AppState {db : db})
+    // .attach(Template::custom(|engines| {
+    //     htmx::customize(&mut engines.tera);
+    // }))
 }

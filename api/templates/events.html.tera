@@ -1,0 +1,17 @@
+{% extends "base" %} 
+{% block content %}
+
+<div id="content">
+    <div id="loaded_content">
+        <div id="events" class="content">
+        ... no events loaded ...
+        </div>
+
+        <span class="loader"></span>
+    </div>
+
+    <button hx-get="/htmx/events/load" hx-target="#events" hx-indicator="#loaded_content">
+        load events!
+    </button>
+</div>
+{% endblock content %}

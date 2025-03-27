@@ -1,12 +1,12 @@
 use uuid::Uuid;
-use rocket::outcome::IntoOutcome;
 
 use rocket::http::{CookieJar, Status};
 use rocket::request::{self, FromRequest};
-use rocket::{get, post, State, Response, Request};
+use rocket::{get, post, State, Request};
 use rocket::form::{Form, FromForm};
 use rocket::serde::{json::Json, Deserialize, Serialize};
-use sqlx::{migrate::MigrateDatabase, Sqlite, SqlitePool, FromRow, Row};
+
+use sqlx::{SqlitePool, FromRow};
 
 use argon2::{
     password_hash::{
@@ -29,10 +29,12 @@ pub struct User{
 #[derive(FromRow)]
 pub struct Session{
     id: String,
-    user_id: i64
+    user_id: i64,
+    #[allow(dead_code)]
+    created_on: String
 }
 
-pub struct SessionId(String);
+// pub struct SessionId(String);
 
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for User {
@@ -40,20 +42,20 @@ impl<'r> FromRequest<'r> for User {
     type Error = ();
 
     async fn from_request(request: &'r Request<'_>) -> request::Outcome<User, ()/*Self::Error*/> {
-        let session_id: SessionId = rocket::outcome::try_outcome!(
-            request.cookies()
+        let session_id: String = request.cookies()
             .get("session_id")// TODO: make private // TODO: make const string
-            .and_then(|cookie| cookie.value().parse().ok())
-            .map(SessionId)
-            .or_forward(Status::Unauthorized));
+            .map(|cookie| cookie.value())
+            .unwrap()
+            .to_string();
 
         let state_outcome = request.guard::<&State<AppState>>().await;
         let state = rocket::outcome::try_outcome!(state_outcome);
 
-        let session = match sqlx::query_as::<_, Session>(
+        let session = match sqlx::query_as!(Session,
             "SELECT * FROM sessions
+            WHERE id = ?
             ORDER BY created_on DESC
-            LIMIT 1"
+            LIMIT 1", session_id
         ).fetch_optional(&state.db)
         .await{
             Ok(r) => match r {
@@ -89,19 +91,10 @@ pub struct Login{
 
 #[post("/login", data="<login>")]
 async fn login(jar: &CookieJar<'_>, state: &State<AppState>, login: Form<Login>) -> Status {
-    let already_logged_id: bool = match jar.get("session_id") {
-        Some(s) => {
-            println!("session_id := {}", s.to_string());
-            true
-        },
-        None => false
-    };
-
     println!("{}", &login.username);
     println!("{}", &login.password);
 
-    let user = sqlx::query_as!(User,
-        "
+    let user: Option<User> = sqlx::query_as!(User, "
         SELECT id, username, password, role
         FROM users
         WHERE username = ?
@@ -159,7 +152,7 @@ fn profile(user: User) -> Json<User> {
     Json(user)
 }
 
-pub fn auth_routes() -> Vec<rocket::Route> {
+pub fn routes() -> Vec<rocket::Route> {
     routes![login, logout, profile]
 }
 
@@ -168,94 +161,16 @@ pub async fn init_admin_user(db: &SqlitePool) {
     let argon2 = Argon2::default();
     let password_hash = argon2.hash_password(b"1q2w3E*", &salt).unwrap().to_string();
 
-    let insert_admin_user = sqlx::query!("
+    sqlx::query("
         INSERT INTO users
         (username, password, role)
-        VALUES
-        ('admin', ?, 'admin')
-    ", password_hash)
-    .execute(db).await.unwrap();
+        SELECT 'admin', $1, 'admin'
+        WHERE NOT EXISTS (
+            SELECT 1 FROM users WHERE username = 'admin'
+        )
+    ")
+    .bind(password_hash)
+    .execute(db)
+    .await
+    .unwrap();
 }
-
-
-// use rocket::form::Form;
-// use rocket::response::{status, Redirect};
-// use rocket::outcome::IntoOutcome;
-// use rocket::request::{self, FlashMessage, FromRequest, Request};
-// use rocket::response::{Redirect, Flash};
-// use rocket::http::{CookieJar, Status};
-// use uuid::Uuid;
-
-
-// #[derive(FromForm)]
-// struct Login<'r> {
-//     username: &'r str,
-//     password: &'r str
-// }
-
-// #[derive(Debug)]
-// struct User(usize);
-
-// #[rocket::async_trait]
-// impl<'r> FromRequest<'r> for User {
-//     type Error = std::convert::Infallible;
-
-//     async fn from_request(request: &'r Request<'_>) -> request::Outcome<User, Self::Error> {
-//         request.cookies()
-//             .get_private("user_id")
-//             .and_then(|cookie| cookie.value().parse().ok())
-//             .map(User)
-//             .or_forward(Status::Unauthorized)
-//     }
-// }
-
-// #[macro_export]
-// macro_rules! session_uri {
-//     ($($t:tt)*) => (rocket::uri!("/session", $crate::session:: $($t)*))
-// }
-
-// pub use session_uri as uri;
-
-// // #[get("/")]
-// // fn index(user: User) -> Template {
-// //     Template::render("session", context! {
-// //         user_id: user.0,
-// //     })
-// // }
-
-// // #[get("/", rank = 2)]
-// // fn no_auth_index() -> Redirect {
-// //     Redirect::to(uri!(login_page))
-// // }
-
-// // #[get("/login")]
-// // fn login(_user: User) -> Redirect {
-// //     Redirect::to(uri!(index))
-// // }
-
-// // #[get("/login", rank = 2)]
-// // fn login_page(flash: Option<FlashMessage<'_>>) -> Template {
-// //     Template::render("login", &flash)
-// // }
-
-// #[openapi(tag = "Login")]
-// #[post("/login", data = "<login>")]
-// fn post_login(jar: &CookieJar<'_>, login: Form<Login<'_>>) -> Result<Redirect, Flash<Redirect>> {
-//     if login.username == "Sergio" && login.password == "password" {
-//         jar.add(("session_id", Uuid::new_v4().to_string()));
-//         jar.add_private(("user_id", "1"));
-//         Ok(Redirect::to(uri!(index)))
-//     } else {
-//         Err(Flash::error(Redirect::to(uri!(login_page)), "Invalid username/password."))
-//     }
-// }
-
-// #[post("/logout")]
-// fn logout(jar: &CookieJar<'_>) -> Flash<Redirect> {
-//     jar.remove_private("user_id");
-//     Flash::success(Redirect::to(uri!(login_page)), "Successfully logged out.")
-// }
-
-// pub fn auth_routes() -> Vec<rocket::Route> {
-//     routes![/*index, no_auth_index,*/ login, login_page, post_login, logout]
-// }
