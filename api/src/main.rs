@@ -35,7 +35,7 @@ struct ErrorResponse {
 
 const DB_URL: &str = "sqlite://sqlite.db";
 
-// #[openapi(tag = "Events")]
+#[openapi(tag = "Events", ignore = "_user")]
 #[get("/events")]
 async fn get_events(state: &State<AppState>, _user: User) -> Json<Vec<Event>> {
     let events = sqlx::query_as::<_, Event>(
@@ -47,9 +47,9 @@ async fn get_events(state: &State<AppState>, _user: User) -> Json<Vec<Event>> {
     return Json(events);
 }
 
-#[openapi(tag = "Events")]
+#[openapi(tag = "Events", ignore = "_user")]
 #[post("/events", data = "<event>")]
-async fn create_event(state: &State<AppState>, event: Form<Event>)
+async fn create_event(state: &State<AppState>, event: Form<Event>, _user: User)
     -> Result<Json<Event>, Status> {
     let result = sqlx::query(
         "INSERT INTO events
@@ -143,10 +143,10 @@ async fn rocket() -> _ {
     */
 
     rocket::build()
-    .mount("/", routes![redirect_to_swagger, get_events])
+    .mount("/", routes![redirect_to_swagger])
     .mount("/", auth::routes())
     .mount("/htmx", htmx::routes())
-    .mount("/", openapi_get_routes![/*get_events, */create_event])
+    .mount("/", openapi_get_routes![get_events, create_event])
     .attach(cors::CORS)
     .attach(Template::fairing())
     .mount("/swagger", make_swagger_ui(&get_docs()))
