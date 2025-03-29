@@ -1,3 +1,5 @@
-<a href="/htmx/">Home</a> |
-<a href="/htmx/events">Events</a> |
-<a href="/htmx/login">Login</a>
+<nav>
+    <a class="nav-item" href="/htmx/">Home</a>
+    <a class="nav-item" href="/htmx/events">Events</a>
+    <a class="nav-item" href="/htmx/login">Login</a>
+</nav>

@@ -1,7 +1,25 @@
-<ul>
-    {% for event in events %}
-        <li>
-            {{ event.title }} -- from {{ event.start_date }} to {{ event.end_date }}
-        </li>
-    {% endfor %}
-</ul>
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>
+                <a 
+                    href="/htmx/events/load?sort=-quantity&amp;search=&amp;page=2&amp;pageSize=10" 
+                    hx-get="?sort=-from&amp;search=&amp;page=2&amp;pageSize=10"
+                    hx-target="#events" 
+                    hx-push-url="true">From&NonBreakingSpace;↓
+                </a>
+            </th>
+            <th>To</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in events %}
+        <tr>
+            <td>{{ event.title }}</td>
+            <td>{{ event.start_date }}</td>
+            <td>{{ event.end_date }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

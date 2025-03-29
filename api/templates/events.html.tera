@@ -2,6 +2,27 @@
 {% block content %}
 
 <div id="content">
+    <form
+        action="" method="get"
+        id="events-controller"
+        hx-trigger="submit, input from:[form=inventory-controller] delay:100ms"
+        hx-get="/htmx/events/load"
+        hx-target="#events"
+        hx-indicator="#loaded_content"
+        hx-push-url="true">
+    </form>
+    <button
+        type="submit"
+        form="events-controller"
+        >LOAD</button>
+    <!--
+    <button hx-get="/htmx/events/load" hx-target="#events" hx-indicator="#loaded_content">
+        load events!
+    </button>
+    -->
+
+    <br /><br />
+
     <div id="loaded_content">
         <div id="events" class="content">
         ... no events loaded ...
@@ -9,9 +30,5 @@
 
         <span class="loader"></span>
     </div>
-
-    <button hx-get="/htmx/events/load" hx-target="#events" hx-indicator="#loaded_content">
-        load events!
-    </button>
 </div>
 {% endblock content %}

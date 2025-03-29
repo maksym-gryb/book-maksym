@@ -5,6 +5,19 @@
     <title>Tera Demo - {{ title }}</title>
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     <style>
+      body{
+        margin: 0px;
+        padding: 0px 20px 0px 20px;
+
+        /* font-family: Helvetica; */
+        font-family: sans-serif;
+        font-size: 22px;
+      }
+
+      #content{
+        font-size: 16;
+      }
+
       .loader {
         display: none;
         width: 48px;
@@ -32,6 +45,54 @@
       .htmx-request .content {
         display: none;
       }
+
+      nav {
+        margin-bottom: 10px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid aliceblue;
+      }
+
+      .nav-item {
+        background: darkslategray;
+        color: white;
+        padding: 5px;
+        margin: 0px 5px 10px 5px;
+        margin-top: 0px;
+        text-decoration: none;
+        font-size: 20px;
+        border-radius: 37%;
+      }
+
+      tbody tr:nth-child(odd) {
+        background-color: #333333;
+      }
+
+      tbody tr:nth-child(even) {
+        background-color: #111111;
+      }
+
+thead tr {
+    background-color: slategray;
+    color: #ffffff;
+    text-align: center;
+}
+
+tbody tr {
+    border-bottom: 1px solid #dddddd;
+}
+
+th,
+td {
+    padding: 12px 15px;
+}
+
+table {
+    border-collapse: collapse;
+    margin: 25px 0;
+    font-size: 0.9em;
+    min-width: 400px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+}
     </style>
   </head>
   <body>
@@ -40,7 +101,6 @@
     {% block content %}{% endblock content %}
 
       <footer>
-        <a href="/">Home</a>
       </footer>
   </body>
 </html>
